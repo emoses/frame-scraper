@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/tebeka/selenium"
@@ -27,6 +28,12 @@ func run() error {
 	if !ok {
 		return fmt.Errorf("Must provide FRAME_SCRAPER_URL in environment")
 	}
+	dashboardUrl, ok := os.LookupEnv("FRAME_SCRAPER_DASHBOARD_URL")
+	if !ok {
+		return fmt.Errorf("Must provide FRAME_SCRAPER_DASHBOARD_URL")
+	}
+	// Trim leading "/" if any
+	dashboardUrl, _ = strings.CutPrefix(dashboardUrl, "/")
 
 	if _, ok := os.LookupEnv("DEBUG"); ok {
 		selenium.SetDebug(true)
@@ -85,8 +92,7 @@ func run() error {
 	if _, err := wd.FindElements(selenium.ByTagName, "home-assistant"); err != nil {
 		return fmt.Errorf("Error waiting for main page load: %w", err)
 	}
-	// TODO env var
-	if err := wd.Get(url + "/lovelace/frame?kiosk"); err != nil {
+	if err := wd.Get(fmt.Sprintf("%s/%s", url, dashboardUrl)); err != nil {
 		return fmt.Errorf("Error opening frame page: %w", err)
 	}
 	if _, err := wd.FindElements(selenium.ByTagName, "home-assistant"); err != nil {
