@@ -28,11 +28,14 @@ FRAME_SCRAPER_DASHBOARD_URL=lovelace/<my dashboard>?kiosk
 FRAME_SCRAPER_USERNAME=<HA username>
 FRAME_SCRAPER_PASSWORD=<HA password>
 FRAME_IP=<The IP of you Frame TV>
+TZ=America/Los_Angeles
 ```
 
 Note that the `?kiosk` in the dashboard url enables [kiosk-mode](https://github.com/maykar/kiosk-mode) if you have it
 installed.  It's not required but it will make your dashboard render without the surrounding frame, which is probably
 what you want.
+
+The Selenium browser's timezone will be whatever you specify in `TZ`, which may affect the rendering of some components.
 
 ## Run
 
