@@ -4,3 +4,4 @@ frame-scraper-linux
 /scraper/output/*
 -/scraper/output/.keep
 .env
+previous-upload

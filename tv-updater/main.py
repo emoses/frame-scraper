@@ -7,9 +7,10 @@ import argparse
 from samsungtvws import SamsungTVWS
 
 # Increase debug level
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 
 def openb(arg):
+    """open as binary, used by argparse"""
     return open(arg, 'rb')
 
 def get_args():
@@ -61,11 +62,13 @@ def do_upload(args: argparse.Namespace):
     logging.info("Uploading")
     data = args.filename.read()
 
-    image_name = tv.art().upload(data)
+    image_name = tv.art().upload(data, matte="none", portrait_matte="none")
     logging.info(f"Uploaded {image_name}")
 
     if not args.noswitch:
+        logging.info("Switching to new image")
         tv.art().select_image(image_name)
+    print(image_name)
 
 
 def do_set(args: argparse.Namespace):
