@@ -4,3 +4,4 @@ frame-scraper-linux
 /output/*
 -/output/.keep
 /tv/.env/
+/.env
