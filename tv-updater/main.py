@@ -25,8 +25,8 @@ def get_args():
 
     parser_upload = subparsers.add_parser("upload", help="upload")
     parser_upload.add_argument("filename", type=openb)
-    parser_upload.add_argument("--noswitch, -n", help="Don't switch to this uploaded file", type=bool)
-    parser_upload.set_defaults(func=do_upload)
+    parser_upload.add_argument("--no-switch, -n", help="Don't switch to this uploaded file", type=bool, dest="noswitch")
+    parser_upload.set_defaults(func=do_upload, noswitch=False)
 
     parser_delete = subparsers.add_parser("delete", help="delete by name")
     parser_delete.add_argument("name", type=str)

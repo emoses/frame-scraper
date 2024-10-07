@@ -1,7 +1,6 @@
 frame-scraper
 frame-scraper-linux
 /build
-/output/*
--/output/.keep
-/tv/.env/
-/.env
+/scraper/output/*
+-/scraper/output/.keep
+.env
