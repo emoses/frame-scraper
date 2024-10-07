@@ -9,6 +9,9 @@ from samsungtvws import SamsungTVWS
 # Increase debug level
 logging.basicConfig(level=logging.INFO)
 
+def openb(arg):
+    return open(arg, 'rb')
+
 def get_args():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers()
@@ -21,7 +24,7 @@ def get_args():
     parser_set.set_defaults(func=do_set)
 
     parser_upload = subparsers.add_parser("upload", help="upload")
-    parser_upload.add_argument("filename", type=open)
+    parser_upload.add_argument("filename", type=openb)
     parser_upload.add_argument("--noswitch, -n", help="Don't switch to this uploaded file", type=bool)
     parser_upload.set_defaults(func=do_upload)
 
@@ -82,5 +85,7 @@ def do_delete(args: argparse.Namespace):
     resp = tv.art().delete(args.name)
     logging.info(resp)
 
-args = get_args()
-args.func(args)
+
+if __name__ == '__main__':
+    args = get_args()
+    args.func(args)

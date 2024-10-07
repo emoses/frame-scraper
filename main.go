@@ -9,7 +9,7 @@ import (
 	"github.com/tebeka/selenium/chrome"
 )
 
-func main() {
+func run() error {
 	opts := []selenium.ServiceOption{
 		selenium.ChromeDriver("/bin/chromedriver"),
 		selenium.Output(os.Stderr),
@@ -17,19 +17,26 @@ func main() {
 
 	username, ok := os.LookupEnv("FRAME_SCRAPER_USERNAME")
 	if !ok {
-		fmt.Fprintf(os.Stderr, "Must supply FRAME_SCRAPER_USERNAME")
-		os.Exit(1)
+		return fmt.Errorf("Must supply FRAME_SCRAPER_USERNAME")
 	}
 	password, ok := os.LookupEnv("FRAME_SCRAPER_PASSWORD")
 	if !ok {
-		fmt.Fprintf(os.Stderr, "Must supply FRAME_SCRAPER_PASSWORD")
-		os.Exit(1)
+		return fmt.Errorf("Must supply FRAME_SCRAPER_PASSWORD")
+	}
+	url, ok := os.LookupEnv("FRAME_SCRAPER_URL")
+	if !ok {
+		return fmt.Errorf("Must provide FRAME_SCRAPER_URL in environment")
 	}
 
-	selenium.SetDebug(true)
+	if _, ok := os.LookupEnv("DEBUG"); ok {
+		selenium.SetDebug(true)
+	} else {
+		selenium.SetDebug(false)
+	}
+
 	service, err := selenium.NewChromeDriverService("/bin/chromedriver", 4444, opts...)
 	if err != nil {
-		panic(fmt.Sprintf("Unable to start selenium service: %s", err.Error()))
+		return fmt.Errorf("Unable to start selenium service: %w", err)
 	}
 	defer service.Stop()
 
@@ -42,62 +49,69 @@ func main() {
 			Args: []string{
 				"--headless",
 				"--disable-gpu",
-				"--window-size=3840x2160",
+				// Use half-size but scale to 2x; this gives us expected size at high dpi
+				"--window-size=1920,1080",
+				"--force-device-scale-factor=2",
 			},
 		},
 	)
 
 	wd, err := selenium.NewRemote(caps, fmt.Sprintf("http://localhost:4444/wd/hub"))
 	if err != nil {
-		panic(fmt.Sprintf("Error starting selenium: %s", err.Error()))
+		return fmt.Errorf("Error starting selenium: %w", err)
 	}
 	defer wd.Quit()
 	wd.SetImplicitWaitTimeout(10 * time.Second)
 
-	url, ok := os.LookupEnv("FRAME_SCRAPER_URL")
-	if !ok {
-		panic("Must provide FRAME_SCRAPER_URL in environment")
-	}
-
 	if err := wd.Get(url); err != nil {
-		panic(fmt.Sprintf("Unable to nav to hass: %s", err.Error()))
+		fmt.Sprintf("Unable to nav to hass: %w", err)
 	}
 
 	usernameEl, err := wd.FindElement(selenium.ByName, "username")
 	if err != nil {
-		panic(fmt.Sprintf("Can't find username field"))
+		return fmt.Errorf("Can't find username field: %w", err)
 	}
 	if err := usernameEl.SendKeys(username); err != nil {
-		panic(fmt.Sprintf("Error sending keys to username: %s", err.Error()))
+		return fmt.Errorf("Error sending keys to username: %w", err)
 	}
 	passwordEl, err := wd.FindElement(selenium.ByName, "password")
 	if err != nil {
-		panic(fmt.Sprintf("Can't find password field"))
+		return fmt.Errorf("Can't find password field: %w", err)
 	}
 	if err := passwordEl.SendKeys(password + "\n"); err != nil {
-		panic(fmt.Sprintf("Error sending keys to password: %s", err.Error()))
+		return fmt.Errorf("Error sending keys to password: %w", err)
 	}
 
 	if _, err := wd.FindElements(selenium.ByTagName, "home-assistant"); err != nil {
-		panic(fmt.Sprintf("Error waiting for main page load: %s", err.Error()))
+		return fmt.Errorf("Error waiting for main page load: %w", err)
 	}
 	// TODO env var
 	if err := wd.Get(url + "/lovelace/frame?kiosk"); err != nil {
-		panic(fmt.Sprintf("Error opening frame page: %s", err.Error()))
+		return fmt.Errorf("Error opening frame page: %w", err)
 	}
 	if _, err := wd.FindElements(selenium.ByTagName, "home-assistant"); err != nil {
-		panic(fmt.Sprintf("Error waiting for main page load: %s", err.Error()))
+		return fmt.Errorf("Error waiting for main page load: %s", err)
 	}
 
-	time.Sleep(10 * time.Second) //yeah yeah I know
+	time.Sleep(5 * time.Second) //yeah yeah I know
 
 	data, err := wd.Screenshot()
 	if err != nil {
-		panic(fmt.Sprintf("Unable to screenshot: %s", err.Error()))
+		return fmt.Errorf("Unable to screenshot: %w", err)
 	}
 
 	if err := os.WriteFile("output/screen.png", data, 0644); err != nil {
-		panic(fmt.Sprintf("Error writing screenshot: %s", err.Error()))
+		return fmt.Errorf("Error writing screenshot: %w", err)
 	}
 
+	return nil
+
+}
+
+func main() {
+	err := run()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v", err)
+		os.Exit(1)
+	}
 }

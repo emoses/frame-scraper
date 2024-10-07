@@ -6,4 +6,4 @@ docker: build-linux
 	docker build -t emoses/frame-scraper .
 
 run:
-	docker run --env-file ./.env emoses/frame-scraper
+	docker run --shm-size="2g" -v $(PWD)/output:/output --env-file  ./.env emoses/frame-scraper
