@@ -46,7 +46,7 @@ def do_list(args: argparse.Namespace):
     if not info:
         print("No content")
     for item in info:
-        print(f'{item["content_id"]}\t{item["width"]}x{item["height"]}\ttype={item["content_type"]}')
+        print(f'{item["content_id"]}\t{item.get("width", "0")}x{item.get("height", "0")}\ttype={item["content_type"]}')
 
 def get_tv():
     tv_ip = os.getenv("FRAME_IP")

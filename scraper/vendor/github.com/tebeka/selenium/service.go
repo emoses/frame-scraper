@@ -247,7 +247,6 @@ func newService(cmd *exec.Cmd, urlPrefix string, port int, opts ...ServiceOption
 }
 
 func (s *Service) start(port int) error {
-	fmt.Printf("Running command %v\n", s.cmd)
 	if err := s.cmd.Start(); err != nil {
 		return err
 	}
