@@ -1,0 +1,16 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+samsungtvws = {git = "https://github.com/NickWaterton/samsung-tv-ws-api.git"}
+hass-client = "*"
+asyncio = "*"
+python-dotenv = "*"
+selenium = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.13"

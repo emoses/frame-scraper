@@ -79,14 +79,21 @@ def do_set(args: argparse.Namespace):
     resp = tv.art().select_image(args.name)
     logging.info(resp)
 
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
 
 def do_delete(args: argparse.Namespace):
     tv = get_tv()
     if not args.name:
         print("name is required", file=sys.stderr)
         sys.exit(2)
-    resp = tv.art().delete(args.name)
-    logging.info(resp)
+    names = args.name.split(',')
+    for ns in chunks(names, 5):
+        print(f'deleting {ns}', file=sys.stderr)
+        resp = tv.art().delete_list(ns)
+        logging.info(resp)
 
 
 if __name__ == '__main__':
