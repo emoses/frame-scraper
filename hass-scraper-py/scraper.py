@@ -3,39 +3,48 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.remote.webdriver import WebDriver
+import dataclasses
+
+@dataclasses.dataclass
+class Config:
+    username: str
+    password: str
+    url: str
+    dashboardPath: str
 
 def start_browser() -> WebDriver:
-    wd = webdriver.Chrome(
-        service=Service(service_args=[
+    options = webdriver.ChromeOptions()
+    for arg in [
             "--headless",
             "--disable-gpu",
             # Use half-size but scale to 2x; this gives us expected size at high dpi
             "--window-size=1920,1080",
             "--force-device-scale-factor=2",
-        ]),
+        ]:
+        options.add_argument(arg)
+    wd = webdriver.Chrome(
+        options=options,
+        service=Service(executable_path="/bin/chromedriver"),
     )
 
     wd.implicitly_wait(10)
     return wd
 
 def scrape(
-        username: str,
-        password: str,
-        url: str,
-        dashboardPath: str,
+        config: Config,
         debug: bool = False,
 ) -> bytes:
     wd = start_browser()
-    wd.get(url)
+    wd.get(config.url)
 
     usernameEl = wd.find_element(By.NAME, "username")
-    usernameEl.send_keys(username)
+    usernameEl.send_keys(config.username)
 
     passwordEl = wd.find_element(By.NAME, "password")
-    passwordEl.send_keys(password)
+    passwordEl.send_keys(config.password + "\n")
 
     wd.find_elements(By.TAG_NAME, "home-assistant")
-    wd.get(f'{url}/{dashboardPath}')
+    wd.get(f'{config.url}/{config.dashboardPath}')
     wd.find_elements(By.TAG_NAME, "home-assistant")
 
     return wd.get_screenshot_as_png()

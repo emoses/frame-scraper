@@ -1,4 +1,4 @@
-SUBDIRS = scraper tv-updater
+SUBDIRS = scraper tv-updater hass-scraper-py
 
 .PHONY: docker
 docker: $(SUBDIRS)_docker
