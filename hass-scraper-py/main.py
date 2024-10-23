@@ -167,17 +167,15 @@ def state_from_evt(eid: str, event: EntityStateEvent) -> bool | None:
 
 
 
-def tv_on_toggle(event: EntityStateEvent) -> None:
+async def tv_on_toggle(event: EntityStateEvent) -> None:
     val = state_from_evt(TV_EID, event)
     if val != None:
-        task = asyncio.create_task(set_tv_on(val))
-        asyncio.get_running_loop().run_until_complete(task)
+        await set_tv_on(val)
 
-def art_mode_toggle(event: EntityStateEvent) -> None:
+async def art_mode_toggle(event: EntityStateEvent) -> None:
     val = state_from_evt(ART_MODE_EID, event)
     if val != None:
-        task = asyncio.create_task(set_art_mode(val))
-        asyncio.get_running_loop().run_until_complete(task)
+        await set_art_mode(val)
 
 async def set_art_mode(val: bool) -> None:
     global artMode
