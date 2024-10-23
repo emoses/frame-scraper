@@ -19,6 +19,10 @@ class Tv:
         tv.art().select_image(image_name)
         return  image_name
 
+    def select(self, name: str) -> None:
+        tv = self._get_tv()
+        tv.art().select_image(name)
+
     def delete(self, names: List[str]) -> None:
         LOGGER.debug("Deleting %s", names)
         self._get_tv().art().delete_list(names)

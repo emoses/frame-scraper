@@ -24,6 +24,7 @@ ART_MODE_EID = "input_boolean.tv_art_mode"
 TV_EID = "media_player.frame_tv"
 
 artMode = False
+artModeCond = asyncio.Condition()
 tvOn = False
 tvOnCond = asyncio.Condition()
 
@@ -39,21 +40,25 @@ async def hassLoop(token: str, url: str) -> None:
             await asyncio.sleep(60)
 
 async def scrapeLoop(delay: float | None, tv: Tv, db: Db) -> None:
-    global tvOn
+    global artMode, tvOn
     while True:
         async with tvOnCond:
-            LOGGER.debug("Awaiting tvOn")
-            await tvOnCond.wait_for(lambda: tvOn)
-            LOGGER.debug("got tvOn")
+            await tvOnCond.wait_for(lambda: tvOn and not artMode)
 
-        if artMode == False:
-            screenshot = await scrape()
-            next_name = tv.upload(screenshot)
-            db.add(next_name)
-            await clean(tv, db)
-        else:
-            LOGGER.debug("art mode on, skipping scrape")
+        screenshot = await scrape()
+        next_name = tv.upload(screenshot)
+        db.add(next_name)
+        await clean(tv, db)
         await asyncio.sleep(delay or DEFAULT_SCRAPE_DELAY_S)
+
+async def artModeLoop(tv: Tv) -> None:
+    global artMode, tvOn
+    while True:
+        async with tvOnCond:
+            await tvOnCond.wait_for(lambda: artMode and tvOn)
+        tv.select('MY_F0105')
+        async with tvOnCond:
+            await tvOnCond.wait_for(lambda: not(artMode and tvOn))
 
 async def clean(tv: Tv, db: Db) -> None:
     oldFiles = db.list()[:-1]
@@ -101,6 +106,7 @@ async def start() -> None:
     await asyncio.gather(
         hassLoop(token, url),
         scrapeLoop(delay=delay, tv=tv, db=db),
+        artModeLoop(tv=tv),
         )
 
 
@@ -161,12 +167,24 @@ def state_from_evt(eid: str, event: EntityStateEvent) -> bool | None:
 
 
 
+def tv_on_toggle(event: EntityStateEvent) -> None:
+    val = state_from_evt(TV_EID, event)
+    if val != None:
+        task = asyncio.create_task(set_tv_on(val))
+        asyncio.get_running_loop().run_until_complete(task)
+
 def art_mode_toggle(event: EntityStateEvent) -> None:
-    global artMode
     val = state_from_evt(ART_MODE_EID, event)
     if val != None:
+        task = asyncio.create_task(set_art_mode(val))
+        asyncio.get_running_loop().run_until_complete(task)
+
+async def set_art_mode(val: bool) -> None:
+    global artMode
+    async with tvOnCond:
         artMode = val
         LOGGER.debug("art mode updated: %s", artMode)
+        tvOnCond.notify_all()
 
 async def set_tv_on(val: bool) -> None:
     global tvOn
@@ -176,10 +194,6 @@ async def set_tv_on(val: bool) -> None:
         tvOnCond.notify_all()
 
 
-def tv_on_toggle(event: EntityStateEvent) -> None:
-    val = state_from_evt(TV_EID, event)
-    if val != None:
-        asyncio.run(set_tv_on(val))
 
 def main() -> None:
     asyncio.run(start())
