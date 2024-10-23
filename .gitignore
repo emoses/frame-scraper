@@ -5,3 +5,4 @@ frame-scraper-linux
 -/scraper/output/.keep
 .env
 previous-upload
+/hass-scraper-py/data/data.db

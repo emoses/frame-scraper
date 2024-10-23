@@ -7,16 +7,25 @@ import re
 from dotenv import load_dotenv
 from functools import partial
 from aiohttp import ClientSession
+from typing import Tuple
 
 from hass_client import HomeAssistantClient
 from hass_client.exceptions import ConnectionFailed
 from hass_client.models import EntityStateEvent
 
 import scraper
+from frame import Tv
+from db import Db
 
+DEFAULT_SCRAPE_DELAY_S = 5*60
 LOGGER = logging.getLogger()
 
+ART_MODE_EID = "input_boolean.tv_art_mode"
+TV_EID = "media_player.frame_tv"
+
 artMode = False
+tvOn = False
+tvOnCond = asyncio.Condition()
 
 
 async def hassLoop(token: str, url: str) -> None:
@@ -24,23 +33,35 @@ async def hassLoop(token: str, url: str) -> None:
         try:
             async with ClientSession() as session:
                 listener = await connect(token, url, session)
-                LOGGER.debug("connected")
                 await listener
-                LOGGER.info("Connect complete")
         except ConnectionFailed as e:
-            LOGGER.error("Connection error, reconnecting", e)
+            LOGGER.warn("Connection error, reconnecting", e)
             await asyncio.sleep(60)
 
-async def scrapeLoop() -> None:
+async def scrapeLoop(delay: float | None, tv: Tv, db: Db) -> None:
+    global tvOn
     while True:
+        async with tvOnCond:
+            LOGGER.debug("Awaiting tvOn")
+            await tvOnCond.wait_for(lambda: tvOn)
+            LOGGER.debug("got tvOn")
+
         if artMode == False:
             screenshot = await scrape()
-            with open('/output/latest.png', 'wb') as f:
-                f.write(screenshot)
+            next_name = tv.upload(screenshot)
+            db.add(next_name)
+            await clean(tv, db)
         else:
             LOGGER.debug("art mode on, skipping scrape")
-        await asyncio.sleep(5*60)
+        await asyncio.sleep(delay or DEFAULT_SCRAPE_DELAY_S)
 
+async def clean(tv: Tv, db: Db) -> None:
+    oldFiles = db.list()[:-1]
+    for i in range(0, len(oldFiles), 5):
+        chunk = oldFiles[i:i+5]
+        LOGGER.debug("Deleting %r", chunk)
+        tv.delete(chunk)
+        db.delete(chunk)
 
 async def start() -> None:
     """Run main."""
@@ -61,21 +82,46 @@ async def start() -> None:
     if not url.startswith("ws"):
         url = f'ws://{url}'
 
+    delayStr = os.getenv("FRAME_SCRAPER_INTERVAL_SEC")
+    delay: float | None = None
+    if delayStr:
+        delay = float(delayStr)
+
+    frame_ip = os.getenv("FRAME_SCRAPER_IP")
+    if not frame_ip:
+        LOGGER.error("Missing env var FRAME_SCRAPER_IP")
+        sys.exit(1)
+    tv = Tv(frame_ip)
+
     logging.basicConfig(level=logging.DEBUG)
+    logging.getLogger("hass_client").setLevel(logging.INFO)
+
+    db = Db('/data/data.db')
 
     await asyncio.gather(
         hassLoop(token, url),
-        scrapeLoop(),
+        scrapeLoop(delay=delay, tv=tv, db=db),
         )
 
 
 async def connect(token: str, url: str, session: ClientSession) -> asyncio.Task[None]:
     """Connect to the server."""
+    global artMode, tvOn
     websocket_url =  f"{url}/api/websocket"
     client = HomeAssistantClient(websocket_url, token, session)
     await client.connect()
     listener = asyncio.create_task(client.start_listening())
-    await client.subscribe_entities(art_mode_toggle, ["input_boolean.tv_art_mode"])
+    states = await client.get_states()
+    for s in states:
+        if s["entity_id"] == ART_MODE_EID:
+            artMode = s["state"] == "on"
+            LOGGER.debug("Art mode initial state: %s", artMode)
+        elif s["entity_id"] == TV_EID:
+            val = s["state"] == "on"
+            await set_tv_on(val)
+            LOGGER.debug("Tv initial state: %s", val)
+    await client.subscribe_entities(art_mode_toggle, [ART_MODE_EID])
+    await client.subscribe_entities(tv_on_toggle, [TV_EID])
     return listener
 
 def mustEnv(name: str) -> str:
@@ -98,24 +144,42 @@ async def scrape() -> bytes:
 
     return screenshot
 
+def state_from_evt(eid: str, event: EntityStateEvent) -> bool | None:
+    try:
+        st = event['a'][eid]['s']
+        return st == 'on'
+    except KeyError:
+        pass
+
+    try:
+        st = event['c'][eid]['+']['s']
+        return st == 'on'
+    except KeyError:
+        pass
+
+    return None
+
+
 
 def art_mode_toggle(event: EntityStateEvent) -> None:
     global artMode
-    try:
-        st = event['a']['input_boolean.tv_art_mode']['s']
-        artMode = st == 'on'
-        LOGGER.debug("art mode changed: %s", artMode)
-        return
-    except KeyError:
-        pass
+    val = state_from_evt(ART_MODE_EID, event)
+    if val != None:
+        artMode = val
+        LOGGER.debug("art mode updated: %s", artMode)
 
-    try:
-        st = event['c']['input_boolean.tv_art_mode']['+']['s']
-        artMode = st == 'on'
-        LOGGER.debug("art mode changed: %s", artMode)
-    except KeyError:
-        pass
+async def set_tv_on(val: bool) -> None:
+    global tvOn
+    async with tvOnCond:
+        tvOn = val
+        LOGGER.debug("tvOn updated: %s", tvOn)
+        tvOnCond.notify_all()
 
+
+def tv_on_toggle(event: EntityStateEvent) -> None:
+    val = state_from_evt(TV_EID, event)
+    if val != None:
+        asyncio.run(set_tv_on(val))
 
 def main() -> None:
     asyncio.run(start())

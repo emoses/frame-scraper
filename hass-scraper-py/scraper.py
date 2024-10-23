@@ -4,6 +4,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.remote.webdriver import WebDriver
 import dataclasses
+import time
+import asyncio
 
 @dataclasses.dataclass
 class Config:
@@ -46,5 +48,8 @@ def scrape(
     wd.find_elements(By.TAG_NAME, "home-assistant")
     wd.get(f'{config.url}/{config.dashboardPath}')
     wd.find_elements(By.TAG_NAME, "home-assistant")
+
+    # TODO investigate switching to playwrite, which has better shadow dom functions
+    time.sleep(5)
 
     return wd.get_screenshot_as_png()

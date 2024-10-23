@@ -3,4 +3,4 @@ docker:
 
 run:
 	mkdir -p output
-	docker run --shm-size="2g" -v ${PWD}/output:/output --env-file  ./.env emoses/hass-scraper-py
+	docker run --shm-size="2g" -v ${PWD}/output:/output -v ${PWD}/data:/data --env-file  ./.env emoses/hass-scraper-py
