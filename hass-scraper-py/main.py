@@ -3,11 +3,13 @@ import logging
 import sys
 import os
 import re
+import tomllib
+import random
 
 from dotenv import load_dotenv
 from functools import partial
 from aiohttp import ClientSession
-from typing import Tuple
+from typing import TypedDict, List, cast, Generator, TypeVar
 
 from hass_client import HomeAssistantClient
 from hass_client.exceptions import ConnectionFailed
@@ -28,55 +30,98 @@ artModeCond = asyncio.Condition()
 tvOn = False
 tvOnCond = asyncio.Condition()
 
+class ScraperConfig(TypedDict):
+    interval_sec: float
 
-async def hassLoop(token: str, url: str) -> None:
+class ArtConfig(TypedDict):
+    files: List[str]
+    rotate_interval_min: float
+    shuffle: bool
+
+
+class Config(TypedDict):
+    scraper: ScraperConfig
+    art: ArtConfig
+
+
+class App:
+    token: str
+    url: str
+    tv: Tv
+    db: Db
+    config: Config
+
+
+async def hassLoop(app: App) -> None:
     while True:
         try:
             async with ClientSession() as session:
-                listener = await connect(token, url, session)
+                listener = await connect(app.token, app.url, session)
                 await listener
         except ConnectionFailed as e:
             LOGGER.warn("Connection error, reconnecting", e)
             await asyncio.sleep(60)
 
-async def scrapeLoop(delay: float | None, tv: Tv, db: Db) -> None:
+async def scrapeLoop(app: App) -> None:
     global artMode, tvOn
     while True:
         async with tvOnCond:
             await tvOnCond.wait_for(lambda: tvOn and not artMode)
 
         screenshot = await scrape()
-        next_name = tv.upload(screenshot)
-        db.add(next_name)
-        await clean(tv, db)
-        await asyncio.sleep(delay or DEFAULT_SCRAPE_DELAY_S)
+        next_name = app.tv.upload(screenshot)
+        app.db.add(next_name)
+        await clean(app)
+        await asyncio.sleep(app.config["scraper"]["interval_sec"] or DEFAULT_SCRAPE_DELAY_S)
 
-async def artModeLoop(tv: Tv) -> None:
+T = TypeVar("T")
+def loopList(ll: List[T]) -> Generator[T, None, None]:
+    while True:
+        for l in ll:
+            yield l
+
+async def artModeLoop(app: App) -> None:
     global artMode, tvOn
+    arts = app.config["art"]["files"].copy()
+    if len(arts) < 1:
+        LOGGER.warn("No art to show.  Add art.files in the config")
+    if app.config["art"]["shuffle"]:
+        random.shuffle(arts)
+    artsGen = loopList(arts)
     while True:
         async with tvOnCond:
             await tvOnCond.wait_for(lambda: artMode and tvOn)
-        tv.select('MY_F0105')
+        app.tv.select(next(artsGen))
         async with tvOnCond:
-            await tvOnCond.wait_for(lambda: not(artMode and tvOn))
+            tasks = [asyncio.create_task(t) for t in [
+                tvOnCond.wait_for(lambda: not(artMode and tvOn)),
+                asyncio.sleep(app.config["art"]["rotate_interval_min"]*60),
+                ]]
+            _, leftover = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            for task in leftover:
+                task.cancel()
 
-async def clean(tv: Tv, db: Db) -> None:
-    oldFiles = db.list()[:-1]
+
+async def clean(app: App) -> None:
+    oldFiles = app.db.list()[:-1]
     for i in range(0, len(oldFiles), 5):
         chunk = oldFiles[i:i+5]
         LOGGER.debug("Deleting %r", chunk)
-        tv.delete(chunk)
-        db.delete(chunk)
+        app.tv.delete(chunk)
+        app.db.delete(chunk)
 
 async def start() -> None:
     """Run main."""
 
     load_dotenv()
 
+    app = App()
+
     token = os.getenv("HASS_TOKEN")
     if not token:
         LOGGER.error("Missing env var HASS_TOKEN")
         sys.exit(1)
+    app.token = token
 
 
     url = os.getenv("HASS_URL")
@@ -86,27 +131,32 @@ async def start() -> None:
     url = re.sub("^http", "ws", url)
     if not url.startswith("ws"):
         url = f'ws://{url}'
-
-    delayStr = os.getenv("FRAME_SCRAPER_INTERVAL_SEC")
-    delay: float | None = None
-    if delayStr:
-        delay = float(delayStr)
+    app.url = url
 
     frame_ip = os.getenv("FRAME_SCRAPER_IP")
     if not frame_ip:
         LOGGER.error("Missing env var FRAME_SCRAPER_IP")
         sys.exit(1)
-    tv = Tv(frame_ip)
+    app.tv = Tv(frame_ip)
 
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger("hass_client").setLevel(logging.INFO)
 
-    db = Db('/data/data.db')
+    app.db = Db('/data/data.db')
+
+    configPath = os.getenv("FRAME_SCRAPER_CONFIG")
+    if not configPath:
+        configPath = '/data/config.toml'
+    try:
+        with open(configPath, 'rb') as f:
+            app.config = cast(Config, tomllib.load(f))
+    except Exception as e:
+        LOGGER.error("Error loading config from %s: %r", configPath, e)
 
     await asyncio.gather(
-        hassLoop(token, url),
-        scrapeLoop(delay=delay, tv=tv, db=db),
-        artModeLoop(tv=tv),
+        hassLoop(app),
+        scrapeLoop(app),
+        artModeLoop(app),
         )
 
 

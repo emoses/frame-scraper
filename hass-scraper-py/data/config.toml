@@ -1,0 +1,7 @@
+[scraper]
+interval_sec = 300.0
+
+[art]
+files = [ "MY_F0105" ]
+rotate_interval_min = 30.0
+shuffle = false
