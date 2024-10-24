@@ -38,8 +38,11 @@ class ArtConfig(TypedDict):
     rotate_interval_min: float
     shuffle: bool
 
+class SystemConfig(TypedDict):
+    logging: str
 
 class Config(TypedDict):
+    system: SystemConfig
     scraper: ScraperConfig
     art: ArtConfig
 
@@ -139,11 +142,6 @@ async def start() -> None:
         sys.exit(1)
     app.tv = Tv(frame_ip)
 
-    logging.basicConfig(level=logging.DEBUG)
-    logging.getLogger("hass_client").setLevel(logging.INFO)
-
-    app.db = Db('/data/data.db')
-
     configPath = os.getenv("FRAME_SCRAPER_CONFIG")
     if not configPath:
         configPath = '/data/config.toml'
@@ -152,6 +150,18 @@ async def start() -> None:
             app.config = cast(Config, tomllib.load(f))
     except Exception as e:
         LOGGER.error("Error loading config from %s: %r", configPath, e)
+
+    logLevel = app.config["system"].get("logging", "INFO")
+    if not logLevel in logging.getLevelNamesMapping():
+        LOGGER.error("Invalid log level in config: %s", logLevel)
+        logLevel = "INFO"
+
+    app.db = Db('/data/data.db')
+
+    logging.basicConfig(level=logging.getLevelNamesMapping()[logLevel])
+    logging.getLogger("hass_client").setLevel(logging.INFO)
+
+
 
     await asyncio.gather(
         hassLoop(app),

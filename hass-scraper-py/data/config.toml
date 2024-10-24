@@ -1,3 +1,6 @@
+[system]
+logging = "INFO"
+
 [scraper]
 interval_sec = 300.0
 
