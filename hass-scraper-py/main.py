@@ -68,14 +68,18 @@ async def hassLoop(app: App) -> None:
 async def scrapeLoop(app: App) -> None:
     global artMode, tvOn
     while True:
-        async with tvOnCond:
-            await tvOnCond.wait_for(lambda: tvOn and not artMode)
+        try:
+            async with tvOnCond:
+                await tvOnCond.wait_for(lambda: tvOn and not artMode)
 
-        screenshot = await scrape()
-        next_name = app.tv.upload(screenshot)
-        app.db.add(next_name)
-        await clean(app)
-        await asyncio.sleep(app.config["scraper"]["interval_sec"] or DEFAULT_SCRAPE_DELAY_S)
+            screenshot = await scrape()
+            next_name = app.tv.upload(screenshot)
+            app.db.add(next_name)
+            await clean(app)
+            await asyncio.sleep(app.config["scraper"]["interval_sec"] or DEFAULT_SCRAPE_DELAY_S)
+        except Exception as e:
+            LOGGER.warn("Error in scrape loop: %r", e)
+            await asyncio.sleep(5)
 
 T = TypeVar("T")
 def loopList(ll: List[T]) -> Generator[T, None, None]:
@@ -92,17 +96,21 @@ async def artModeLoop(app: App) -> None:
         random.shuffle(arts)
     artsGen = loopList(arts)
     while True:
-        async with tvOnCond:
-            await tvOnCond.wait_for(lambda: artMode and tvOn)
-        app.tv.select(next(artsGen))
-        async with tvOnCond:
-            tasks = [asyncio.create_task(t) for t in [
-                tvOnCond.wait_for(lambda: not(artMode and tvOn)),
-                asyncio.sleep(app.config["art"]["rotate_interval_min"]*60),
-                ]]
-            _, leftover = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            for task in leftover:
-                task.cancel()
+        try:
+            async with tvOnCond:
+                await tvOnCond.wait_for(lambda: artMode and tvOn)
+            app.tv.select(next(artsGen))
+            async with tvOnCond:
+                tasks = [asyncio.create_task(t) for t in [
+                    tvOnCond.wait_for(lambda: not(artMode and tvOn)),
+                    asyncio.sleep(app.config["art"]["rotate_interval_min"]*60),
+                    ]]
+                _, leftover = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                for task in leftover:
+                    task.cancel()
+        except Exception as e:
+            LOGGER.warn("Error in art mode loop, restarting: %r", e)
+            await asyncio.sleep(5)
 
 
 async def clean(app: App) -> None:
@@ -158,7 +166,11 @@ async def start() -> None:
 
     app.db = Db('/data/data.db')
 
-    logging.basicConfig(level=logging.getLevelNamesMapping()[logLevel])
+    logging.basicConfig(
+        format='%(asctime)s %(levelname)-8s %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        level=logging.getLevelNamesMapping()[logLevel],
+    )
     logging.getLogger("hass_client").setLevel(logging.INFO)
 
 
