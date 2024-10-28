@@ -15,7 +15,7 @@ from hass_client import HomeAssistantClient
 from hass_client.exceptions import ConnectionFailed
 from hass_client.models import EntityStateEvent
 
-import scraper_playwright as scraper
+import scraper
 from frame import Tv
 from db import Db
 

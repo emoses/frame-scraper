@@ -8,7 +8,6 @@ samsungtvws = {git = "https://github.com/NickWaterton/samsung-tv-ws-api.git"}
 hass-client = "*"
 asyncio = "*"
 python-dotenv = "*"
-selenium = "*"
 playwright = "1.48.0"
 
 [dev-packages]

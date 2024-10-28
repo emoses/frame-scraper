@@ -1,11 +1,10 @@
-from selenium import webdriver
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.remote.webdriver import WebDriver
+from playwright.async_api import async_playwright, Playwright, TimeoutError as PlaywrightTimeoutError
 import dataclasses
-import time
-import asyncio
+import logging
+
+CONTEXT_FILE = '/data/playwright'
+
+LOGGER = logging.Logger(__name__)
 
 @dataclasses.dataclass
 class Config:
@@ -14,42 +13,35 @@ class Config:
     url: str
     dashboardPath: str
 
-def start_browser() -> WebDriver:
-    options = webdriver.ChromeOptions()
-    for arg in [
-            "--headless",
-            "--disable-gpu",
-            # Use half-size but scale to 2x; this gives us expected size at high dpi
-            "--window-size=1920,1080",
-            "--force-device-scale-factor=2",
-        ]:
-        options.add_argument(arg)
-    wd = webdriver.Chrome(
-        options=options,
-        service=Service(executable_path="/bin/chromedriver"),
-    )
-
-    wd.implicitly_wait(10)
-    return wd
-
-def scrape(
+async def scrape(
         config: Config,
-        debug: bool = False,
-) -> bytes:
-    wd = start_browser()
-    wd.get(config.url)
+        ) -> bytes:
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch_persistent_context(
+            CONTEXT_FILE,
+            headless=True,
+            viewport={
+                "width": 1920,
+                "height": 1080,
+            },
+            device_scale_factor=2,
+            args=[
+                "--disable-gpu",
+            ])
+        page = await browser.new_page()
+        await page.goto(f'{config.url}/{config.dashboardPath}')
+        outer = page.locator('home-assistant')
+        try:
+            await outer.wait_for(timeout=2000)
+        except PlaywrightTimeoutError:
+            LOGGER.info("Logging in")
+            # This means we were redirected to the login page
+            await page.locator("[name='username']").fill(config.username)
+            pw = page.locator("[name='password']")
+            await pw.fill(config.password)
+            await pw.press("Enter")
+            await page.locator("home-assistant").wait_for()
+            await page.goto(f'{config.url}/{config.dashboardPath}')
+        await page.locator("ha-card.type-custom-week-planner-card .day").first.wait_for()
 
-    usernameEl = wd.find_element(By.NAME, "username")
-    usernameEl.send_keys(config.username)
-
-    passwordEl = wd.find_element(By.NAME, "password")
-    passwordEl.send_keys(config.password + "\n")
-
-    wd.find_elements(By.TAG_NAME, "home-assistant")
-    wd.get(f'{config.url}/{config.dashboardPath}')
-    wd.find_elements(By.TAG_NAME, "home-assistant")
-
-    # TODO investigate switching to playwrite, which has better shadow dom functions
-    time.sleep(5)
-
-    return wd.get_screenshot_as_png()
+        return await page.screenshot()
