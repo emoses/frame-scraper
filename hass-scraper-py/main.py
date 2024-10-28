@@ -99,7 +99,9 @@ async def artModeLoop(app: App) -> None:
         try:
             async with tvOnCond:
                 await tvOnCond.wait_for(lambda: artMode and tvOn)
-            app.tv.select(next(artsGen))
+            nextArt = next(artsGen)
+            LOGGER.info("Setting art to %s", nextArt)
+            app.tv.select(nextArt)
             async with tvOnCond:
                 tasks = [asyncio.create_task(t) for t in [
                     tvOnCond.wait_for(lambda: not(artMode and tvOn)),
@@ -193,11 +195,11 @@ async def connect(token: str, url: str, session: ClientSession) -> asyncio.Task[
     for s in states:
         if s["entity_id"] == ART_MODE_EID:
             artMode = s["state"] == "on"
-            LOGGER.debug("Art mode initial state: %s", artMode)
+            LOGGER.info("Art mode initial state: %s", artMode)
         elif s["entity_id"] == TV_EID:
             val = s["state"] == "on"
             await set_tv_on(val)
-            LOGGER.debug("Tv initial state: %s", val)
+            LOGGER.info("Tv initial state: %s", val)
     await client.subscribe_entities(art_mode_toggle, [ART_MODE_EID])
     await client.subscribe_entities(tv_on_toggle, [TV_EID])
     return listener
@@ -209,6 +211,7 @@ def mustEnv(name: str) -> str:
     return v
 
 async def scrape() -> bytes:
+    LOGGER.info("Scraping")
     config = scraper.Config(
         url=mustEnv("FRAME_SCRAPER_URL"),
         username=mustEnv("FRAME_SCRAPER_USERNAME"),
@@ -251,14 +254,14 @@ async def set_art_mode(val: bool) -> None:
     global artMode
     async with tvOnCond:
         artMode = val
-        LOGGER.debug("art mode updated: %s", artMode)
+        LOGGER.info("art mode updated: %s", artMode)
         tvOnCond.notify_all()
 
 async def set_tv_on(val: bool) -> None:
     global tvOn
     async with tvOnCond:
         tvOn = val
-        LOGGER.debug("tvOn updated: %s", tvOn)
+        LOGGER.info("tvOn updated: %s", tvOn)
         tvOnCond.notify_all()
 
 
