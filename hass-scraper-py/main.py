@@ -15,7 +15,7 @@ from hass_client import HomeAssistantClient
 from hass_client.exceptions import ConnectionFailed
 from hass_client.models import EntityStateEvent
 
-import scraper
+import scraper_playwright as scraper
 from frame import Tv
 from db import Db
 
@@ -216,9 +216,7 @@ async def scrape() -> bytes:
         dashboardPath=mustEnv("FRAME_SCRAPER_DASHBOARD_URL"),
         )
 
-    loop = asyncio.get_running_loop()
-    wrapped = partial(scraper.scrape, config, True)
-    screenshot = await loop.run_in_executor(None, wrapped)
+    screenshot = await scraper.scrape(config)
 
     return screenshot
 

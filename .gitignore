@@ -6,3 +6,4 @@ frame-scraper-linux
 .env
 previous-upload
 /hass-scraper-py/data/data.db
+/hass-scraper-py/playwright/
