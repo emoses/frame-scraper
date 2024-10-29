@@ -61,8 +61,8 @@ async def hassLoop(app: App) -> None:
             async with ClientSession() as session:
                 listener = await connect(app.token, app.url, session)
                 await listener
-        except ConnectionFailed as e:
-            LOGGER.warn("Connection error, reconnecting", e)
+        except ConnectionFailed:
+            LOGGER.exception("Connection error, reconnecting")
             await asyncio.sleep(60)
 
 async def scrapeLoop(app: App) -> None:
@@ -77,8 +77,8 @@ async def scrapeLoop(app: App) -> None:
             app.db.add(next_name)
             await clean(app)
             await asyncio.sleep(app.config["scraper"]["interval_sec"] or DEFAULT_SCRAPE_DELAY_S)
-        except Exception as e:
-            LOGGER.warn("Error in scrape loop: %r", e)
+        except Exception:
+            LOGGER.exception("Error in scrape loop: %r")
             await asyncio.sleep(5)
 
 T = TypeVar("T")
@@ -87,11 +87,16 @@ def loopList(ll: List[T]) -> Generator[T, None, None]:
         for l in ll:
             yield l
 
+async def artModeLoopPauser():
+    async with tvOnCond:
+        await tvOnCond.wait_for(lambda: not(artMode and tvOn))
+
+
 async def artModeLoop(app: App) -> None:
     global artMode, tvOn
     arts = app.config["art"]["files"].copy()
     if len(arts) < 1:
-        LOGGER.warn("No art to show.  Add art.files in the config")
+        LOGGER.warning("No art to show.  Add art.files in the config")
     if app.config["art"]["shuffle"]:
         random.shuffle(arts)
     artsGen = loopList(arts)
@@ -102,16 +107,15 @@ async def artModeLoop(app: App) -> None:
             nextArt = next(artsGen)
             LOGGER.info("Setting art to %s", nextArt)
             app.tv.select(nextArt)
-            async with tvOnCond:
-                tasks = [asyncio.create_task(t) for t in [
-                    tvOnCond.wait_for(lambda: not(artMode and tvOn)),
-                    asyncio.sleep(app.config["art"]["rotate_interval_min"]*60),
-                    ]]
-                _, leftover = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-                for task in leftover:
-                    task.cancel()
+            tasks = [asyncio.create_task(t) for t in [
+                artModeLoopPauser(),
+                asyncio.sleep(app.config["art"]["rotate_interval_min"]*60),
+            ]]
+            _, leftover = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            for task in leftover:
+                task.cancel()
         except Exception as e:
-            LOGGER.warn("Error in art mode loop, restarting: %r", e)
+            LOGGER.exception("Error in art mode loop, restarting")
             await asyncio.sleep(5)
 
 
