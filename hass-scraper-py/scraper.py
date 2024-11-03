@@ -1,6 +1,12 @@
 from playwright.async_api import async_playwright, Playwright, TimeoutError as PlaywrightTimeoutError
 import dataclasses
 import logging
+import asyncio
+import argparse
+
+from dotenv import load_dotenv
+
+from util import mustEnv, openb
 
 CONTEXT_FILE = '/data/playwright'
 
@@ -21,10 +27,10 @@ async def scrape(
             CONTEXT_FILE,
             headless=True,
             viewport={
-                "width": 1920,
-                "height": 1080,
+                "width": 1728,
+                "height": 972,
             },
-            device_scale_factor=2,
+            device_scale_factor=2.2222222222222,
             args=[
                 "--disable-gpu",
             ])
@@ -45,3 +51,31 @@ async def scrape(
         await page.locator("ha-card.type-custom-week-planner-card .day").first.wait_for()
 
         return await page.screenshot()
+
+
+async def scrape_main() -> None:
+    logging.basicConfig(
+        format='%(asctime)s %(levelname)-8s %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        level=logging.DEBUG,
+    )
+    load_dotenv()
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("filename", default="/output/scrape.png")
+    args = parser.parse_args()
+
+
+    config = Config(
+        url=mustEnv("FRAME_SCRAPER_URL"),
+        username=mustEnv("FRAME_SCRAPER_USERNAME"),
+        password=mustEnv("FRAME_SCRAPER_PASSWORD"),
+        dashboardPath=mustEnv("FRAME_SCRAPER_DASHBOARD_URL"),
+        )
+
+    file = await asyncio.create_task(scrape(config))
+    with open(args.filename, 'wb') as f:
+        f.write(file)
+
+if __name__ == '__main__':
+    asyncio.run(scrape_main())

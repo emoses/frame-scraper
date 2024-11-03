@@ -18,6 +18,7 @@ from hass_client.models import EntityStateEvent
 import scraper
 from frame import Tv
 from db import Db
+from util import mustEnv
 
 DEFAULT_SCRAPE_DELAY_S = 5*60
 LOGGER = logging.getLogger()
@@ -76,6 +77,7 @@ async def scrapeLoop(app: App) -> None:
             next_name = app.tv.upload(screenshot)
             app.db.add(next_name)
             await clean(app)
+            # TODO: if we enter art mode, we should cancel this wait
             await asyncio.sleep(app.config["scraper"]["interval_sec"] or DEFAULT_SCRAPE_DELAY_S)
         except Exception:
             LOGGER.exception("Error in scrape loop: %r")
@@ -207,12 +209,6 @@ async def connect(token: str, url: str, session: ClientSession) -> asyncio.Task[
     await client.subscribe_entities(art_mode_toggle, [ART_MODE_EID])
     await client.subscribe_entities(tv_on_toggle, [TV_EID])
     return listener
-
-def mustEnv(name: str) -> str:
-    v = os.getenv(name)
-    if not v:
-        raise Exception(f"Must set {v}")
-    return v
 
 async def scrape() -> bytes:
     LOGGER.info("Scraping")
