@@ -27,9 +27,8 @@ ART_MODE_EID = "input_boolean.tv_art_mode"
 TV_EID = "media_player.frame_tv"
 
 artMode = False
-artModeCond = asyncio.Condition()
 tvOn = False
-tvOnCond = asyncio.Condition()
+tvStateCond = asyncio.Condition()
 
 class ScraperConfig(TypedDict):
     interval_sec: float
@@ -66,19 +65,26 @@ async def hassLoop(app: App) -> None:
             LOGGER.exception("Connection error, reconnecting")
             await asyncio.sleep(60)
 
+async def waitForArtModeOn():
+    async with tvStateCond:
+        await tvStateCond.wait_for(lambda: tvOn and artMode)
+
+
 async def scrapeLoop(app: App) -> None:
     global artMode, tvOn
     while True:
         try:
-            async with tvOnCond:
-                await tvOnCond.wait_for(lambda: tvOn and not artMode)
+            async with tvStateCond:
+                await tvStateCond.wait_for(lambda: tvOn and not artMode)
 
             screenshot = await scrape()
             next_name = app.tv.upload(screenshot)
             app.db.add(next_name)
             await clean(app)
-            # TODO: if we enter art mode, we should cancel this wait
-            await asyncio.sleep(app.config["scraper"]["interval_sec"] or DEFAULT_SCRAPE_DELAY_S)
+            try:
+                await asyncio.wait_for(waitForArtModeOn(), timeout=(app.config["scraper"]["interval_sec"] or DEFAULT_SCRAPE_DELAY_S))
+            except TimeoutError:
+                pass
         except Exception:
             LOGGER.exception("Error in scrape loop: %r")
             await asyncio.sleep(5)
@@ -90,8 +96,8 @@ def loopList(ll: List[T]) -> Generator[T, None, None]:
             yield l
 
 async def artModeLoopPauser():
-    async with tvOnCond:
-        await tvOnCond.wait_for(lambda: not(artMode and tvOn))
+    async with tvStateCond:
+        await tvStateCond.wait_for(lambda: not(artMode and tvOn))
 
 
 async def artModeLoop(app: App) -> None:
@@ -104,18 +110,15 @@ async def artModeLoop(app: App) -> None:
     artsGen = loopList(arts)
     while True:
         try:
-            async with tvOnCond:
-                await tvOnCond.wait_for(lambda: artMode and tvOn)
+            async with tvStateCond:
+                await tvStateCond.wait_for(lambda: artMode and tvOn)
             nextArt = next(artsGen)
             LOGGER.info("Setting art to %s", nextArt)
             app.tv.select(nextArt)
-            tasks = [asyncio.create_task(t) for t in [
-                artModeLoopPauser(),
-                asyncio.sleep(app.config["art"]["rotate_interval_min"]*60),
-            ]]
-            _, leftover = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            for task in leftover:
-                task.cancel()
+            try:
+                await asyncio.wait_for(artModeLoopPauser(), timeout=app.config["art"]["rotate_interval_min"]*60)
+            except TimeoutError:
+                pass
         except Exception as e:
             LOGGER.exception("Error in art mode loop, restarting")
             await asyncio.sleep(5)
@@ -252,17 +255,17 @@ async def art_mode_toggle(event: EntityStateEvent) -> None:
 
 async def set_art_mode(val: bool) -> None:
     global artMode
-    async with tvOnCond:
+    async with tvStateCond:
         artMode = val
         LOGGER.info("art mode updated: %s", artMode)
-        tvOnCond.notify_all()
+        tvStateCond.notify_all()
 
 async def set_tv_on(val: bool) -> None:
     global tvOn
-    async with tvOnCond:
+    async with tvStateCond:
         tvOn = val
         LOGGER.info("tvOn updated: %s", tvOn)
-        tvOnCond.notify_all()
+        tvStateCond.notify_all()
 
 
 
