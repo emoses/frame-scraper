@@ -10,7 +10,7 @@ class Tv:
         self.ip = ip
 
     def _get_tv(self) -> SamsungTVWS:
-        return SamsungTVWS(self.ip)
+        return SamsungTVWS(self.ip, timeout=30)
 
     def upload(self, img: bytes) -> str:
         tv = self._get_tv()
