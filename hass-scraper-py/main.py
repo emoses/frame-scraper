@@ -85,8 +85,8 @@ async def scrapeLoop(app: App) -> None:
                 await asyncio.wait_for(waitForArtModeOn(), timeout=(app.config["scraper"]["interval_sec"] or DEFAULT_SCRAPE_DELAY_S))
             except TimeoutError:
                 pass
-        except Exception:
-            LOGGER.exception("Error in scrape loop: %r")
+        except Exception as e:
+            LOGGER.exception("Error in scrape loop: %r", e)
             await asyncio.sleep(5)
 
 T = TypeVar("T")

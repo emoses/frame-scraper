@@ -34,23 +34,26 @@ async def scrape(
             args=[
                 "--disable-gpu",
             ])
-        page = await browser.new_page()
-        await page.goto(f'{config.url}/{config.dashboardPath}')
-        outer = page.locator('home-assistant')
         try:
-            await outer.wait_for(timeout=2000)
-        except PlaywrightTimeoutError:
-            LOGGER.info("Logging in")
-            # This means we were redirected to the login page
-            await page.locator("[name='username']").fill(config.username)
-            pw = page.locator("[name='password']")
-            await pw.fill(config.password)
-            await pw.press("Enter")
-            await page.locator("home-assistant").wait_for()
+            page = await browser.new_page()
             await page.goto(f'{config.url}/{config.dashboardPath}')
-        await page.locator("ha-card.type-custom-week-planner-card .day").first.wait_for()
+            outer = page.locator('home-assistant')
+            try:
+                await outer.wait_for(timeout=2000)
+            except PlaywrightTimeoutError:
+                LOGGER.info("Logging in")
+                # This means we were redirected to the login page
+                await page.locator("[name='username']").fill(config.username)
+                pw = page.locator("[name='password']")
+                await pw.fill(config.password)
+                await pw.press("Enter")
+                await page.locator("home-assistant").wait_for()
+                await page.goto(f'{config.url}/{config.dashboardPath}')
+            await page.locator("ha-card.type-custom-week-planner-card .day").first.wait_for()
 
-        return await page.screenshot()
+            return await page.screenshot()
+        finally:
+            await browser.close()
 
 
 async def scrape_main() -> None:
