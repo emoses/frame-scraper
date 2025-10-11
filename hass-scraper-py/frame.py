@@ -10,22 +10,22 @@ class Tv:
         self.ip = ip
 
     def _get_tv(self) -> SamsungTVWS:
-        return SamsungTVWS(self.ip, timeout=30)
+        return SamsungTVWSAsyncArt(self.ip, timeout=30)
 
-    def upload(self, img: bytes) -> str:
+    async def upload(self, img: bytes) -> str:
         tv = self._get_tv()
-        image_name = tv.art().upload(img, matte="none", portrait_matte="none")
+        image_name = await tv.upload(img, matte="none", portrait_matte="none")
         LOGGER.info(f"Uploaded {image_name}")
-        tv.art().select_image(image_name)
+        await tv.select_image(image_name)
         return  image_name
 
-    def select(self, name: str) -> None:
+    async def select(self, name: str) -> None:
         tv = self._get_tv()
-        tv.art().select_image(name)
+        await tv.select_image(name)
 
-    def delete(self, names: List[str]) -> None:
+    async def delete(self, names: List[str]) -> None:
         LOGGER.debug("Deleting %s", names)
-        self._get_tv().art().delete_list(names)
+        await self._get_tv().delete_list(names)
 
-    def list(self):
-        return self._get_tv().art().available()
+    async def list(self):
+        return await self._get_tv().available()

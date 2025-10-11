@@ -78,7 +78,8 @@ async def scrapeLoop(app: App) -> None:
                 await tvStateCond.wait_for(lambda: tvOn and not artMode)
 
             screenshot = await scrape()
-            next_name = app.tv.upload(screenshot)
+            next_name = await app.tv.upload(screenshot)
+
             app.db.add(next_name)
             await clean(app)
             try:
@@ -114,7 +115,7 @@ async def artModeLoop(app: App) -> None:
                 await tvStateCond.wait_for(lambda: artMode and tvOn)
             nextArt = next(artsGen)
             LOGGER.info("Setting art to %s", nextArt)
-            app.tv.select(nextArt)
+            await app.tv.select(nextArt)
             try:
                 await asyncio.wait_for(artModeLoopPauser(), timeout=app.config["art"]["rotate_interval_min"]*60)
             except TimeoutError:
@@ -129,7 +130,7 @@ async def clean(app: App) -> None:
     for i in range(0, len(oldFiles), 5):
         chunk = oldFiles[i:i+5]
         LOGGER.debug("Deleting %r", chunk)
-        app.tv.delete(chunk)
+        await app.tv.delete(chunk)
         app.db.delete(chunk)
 
 async def start() -> None:
