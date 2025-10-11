@@ -1,5 +1,5 @@
 import logging
-from samsungtvws import SamsungTVWS
+from samsungtvws.async_art import SamsungTVAsyncArt
 from typing import List
 
 
@@ -9,8 +9,8 @@ class Tv:
     def __init__(self, ip: str):
         self.ip = ip
 
-    def _get_tv(self) -> SamsungTVWS:
-        return SamsungTVWSAsyncArt(self.ip, timeout=30)
+    def _get_tv(self) -> SamsungTVAsyncArt:
+        return SamsungTVAsyncArt(self.ip, timeout=30)
 
     async def upload(self, img: bytes) -> str:
         tv = self._get_tv()
