@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import logging.config
 import sys
 import os
 import re
@@ -9,7 +10,7 @@ import random
 from dotenv import load_dotenv
 from functools import partial
 from aiohttp import ClientSession
-from typing import TypedDict, List, cast, Generator, TypeVar
+from typing import TypedDict, Dict, List, cast, Generator, TypeVar, Any, Optional
 
 from hass_client import HomeAssistantClient
 from hass_client.exceptions import ConnectionFailed
@@ -45,6 +46,7 @@ class Config(TypedDict):
     system: SystemConfig
     scraper: ScraperConfig
     art: ArtConfig
+    logging: Optional[Dict[str, Any]]
 
 
 class App:
@@ -133,6 +135,25 @@ async def clean(app: App) -> None:
         await app.tv.delete(chunk)
         app.db.delete(chunk)
 
+def setup_logging(config: Config, default_level=logging.INFO) -> None:
+    """
+    Set up logging configuration from YAML file if available.
+    Falls back to basicConfig if file is missing or invalid.
+    """
+    if config["logging"] is not None:
+        logging.config.dictConfig(config["logging"])
+        logging.getLogger(__name__).debug(
+            f"Loaded logging configuration from config.toml"
+        )
+    else:
+        # Fallback
+        logging.basicConfig(
+            format='%(asctime)s %(levelname)-8s %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S',
+            level=default_level
+        )
+
+
 async def start() -> None:
     """Run main."""
 
@@ -176,16 +197,9 @@ async def start() -> None:
         LOGGER.error("Invalid log level in config: %s", logLevel)
         logLevel = "INFO"
 
+    setup_logging(app.config, logging.getLevelNamesMapping()[logLevel])
+
     app.db = Db('/data/data.db')
-
-    logging.basicConfig(
-        format='%(asctime)s %(levelname)-8s %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S',
-        level=logging.getLevelNamesMapping()[logLevel],
-    )
-    logging.getLogger("hass_client").setLevel(logging.INFO)
-
-
 
     await asyncio.gather(
         hassLoop(app),
