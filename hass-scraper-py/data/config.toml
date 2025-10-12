@@ -14,7 +14,8 @@ version = 1
 disable_existing_loggers = false
 
 [logging.formatters.simple]
-format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+format = "%(asctime)s %(levelname)-8s %(message)s"
+datefmt = "%Y-%m-%d %H:%M:%S"
 
 [logging.handlers.console]
 class = "logging.StreamHandler"
@@ -22,12 +23,6 @@ level = "INFO"
 formatter = "simple"
 stream = "ext://sys.stdout"
 
-[logging.handlers.file]
-class = "logging.FileHandler"
-level = "DEBUG"
-formatter = "simple"
-filename = "app.log"
-
 [logging.loggers.root]
 level = "INFO"
-handlers = ["console", "file"]
+handlers = ["console"]

@@ -142,7 +142,7 @@ def setup_logging(config: Config, default_level=logging.INFO) -> None:
     """
     if config["logging"] is not None:
         logging.config.dictConfig(config["logging"])
-        logging.getLogger(__name__).debug(
+        logging.getLogger(__name__).info(
             f"Loaded logging configuration from config.toml"
         )
     else:
@@ -151,6 +151,9 @@ def setup_logging(config: Config, default_level=logging.INFO) -> None:
             format='%(asctime)s %(levelname)-8s %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S',
             level=default_level
+        )
+        logging.getLogger(__name__).info(
+            f"Falling back to standard logging config"
         )
 
 
