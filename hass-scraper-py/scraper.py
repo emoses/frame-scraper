@@ -49,7 +49,7 @@ async def scrape(
                 await pw.press("Enter")
                 await page.locator("home-assistant").wait_for()
                 await page.goto(f'{config.url}/{config.dashboardPath}')
-            await page.locator("ha-card.type-custom-week-planner-card .day").first.wait_for()
+            await page.locator("week-planner-card .day").first.wait_for()
 
             return await page.screenshot()
         finally:
