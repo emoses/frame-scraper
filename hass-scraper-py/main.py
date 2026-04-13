@@ -22,6 +22,7 @@ from db import Db
 from util import mustEnv
 
 DEFAULT_SCRAPE_DELAY_S = 5*60
+SCRAPE_TIMEOUT_S = 120
 LOGGER = logging.getLogger()
 
 ART_MODE_EID = "input_boolean.tv_art_mode"
@@ -67,11 +68,6 @@ async def hassLoop(app: App) -> None:
             LOGGER.exception("Connection error, reconnecting")
             await asyncio.sleep(60)
 
-async def waitForArtModeOn():
-    async with tvStateCond:
-        await tvStateCond.wait_for(lambda: tvOn and artMode)
-
-
 async def scrapeLoop(app: App) -> None:
     global artMode, tvOn
     while True:
@@ -79,13 +75,17 @@ async def scrapeLoop(app: App) -> None:
             async with tvStateCond:
                 await tvStateCond.wait_for(lambda: tvOn and not artMode)
 
-            screenshot = await scrape()
-            next_name = await app.tv.upload(screenshot)
+            screenshot = await asyncio.wait_for(scrape(), timeout=SCRAPE_TIMEOUT_S)
+            next_name = await asyncio.wait_for(app.tv.upload(screenshot), timeout=SCRAPE_TIMEOUT_S)
 
             app.db.add(next_name)
             await clean(app)
             try:
-                await asyncio.wait_for(waitForArtModeOn(), timeout=(app.config["scraper"]["interval_sec"] or DEFAULT_SCRAPE_DELAY_S))
+                async with tvStateCond:
+                    await asyncio.wait_for(
+                        tvStateCond.wait_for(lambda: tvOn and artMode),
+                        timeout=(app.config["scraper"]["interval_sec"] or DEFAULT_SCRAPE_DELAY_S),
+                    )
             except TimeoutError:
                 pass
         except Exception as e:
@@ -97,11 +97,6 @@ def loopList(ll: List[T]) -> Generator[T, None, None]:
     while True:
         for l in ll:
             yield l
-
-async def artModeLoopPauser():
-    async with tvStateCond:
-        await tvStateCond.wait_for(lambda: not(artMode and tvOn))
-
 
 async def artModeLoop(app: App) -> None:
     global artMode, tvOn
@@ -117,9 +112,13 @@ async def artModeLoop(app: App) -> None:
                 await tvStateCond.wait_for(lambda: artMode and tvOn)
             nextArt = next(artsGen)
             LOGGER.info("Setting art to %s", nextArt)
-            await app.tv.select(nextArt)
+            await asyncio.wait_for(app.tv.select(nextArt), timeout=SCRAPE_TIMEOUT_S)
             try:
-                await asyncio.wait_for(artModeLoopPauser(), timeout=app.config["art"]["rotate_interval_min"]*60)
+                async with tvStateCond:
+                    await asyncio.wait_for(
+                        tvStateCond.wait_for(lambda: not(artMode and tvOn)),
+                        timeout=app.config["art"]["rotate_interval_min"]*60,
+                    )
             except TimeoutError:
                 pass
         except Exception as e:
