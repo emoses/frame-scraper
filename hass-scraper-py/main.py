@@ -237,6 +237,7 @@ async def scrape() -> bytes:
         username=mustEnv("FRAME_SCRAPER_USERNAME"),
         password=mustEnv("FRAME_SCRAPER_PASSWORD"),
         dashboardPath=mustEnv("FRAME_SCRAPER_DASHBOARD_URL"),
+        wait_for_locator=os.getenv("FRAME_SCRAPER_WAIT_FOR_LOCATOR"),
         )
 
     screenshot = await scraper.scrape(config)

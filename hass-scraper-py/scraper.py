@@ -3,6 +3,7 @@ import dataclasses
 import logging
 import asyncio
 import argparse
+import os
 
 from dotenv import load_dotenv
 
@@ -18,6 +19,7 @@ class Config:
     password: str
     url: str
     dashboardPath: str
+    wait_for_locator: str | None
 
 async def scrape(
         config: Config,
@@ -49,7 +51,8 @@ async def scrape(
                 await pw.press("Enter")
                 await page.locator("home-assistant").wait_for()
                 await page.goto(f'{config.url}/{config.dashboardPath}')
-            await page.locator("week-planner-card .day").first.wait_for()
+            if config.wait_for_locator:
+                await page.locator(config.wait_for_locator).first.wait_for()
 
             return await page.screenshot()
         finally:
@@ -74,6 +77,7 @@ async def scrape_main() -> None:
         username=mustEnv("FRAME_SCRAPER_USERNAME"),
         password=mustEnv("FRAME_SCRAPER_PASSWORD"),
         dashboardPath=mustEnv("FRAME_SCRAPER_DASHBOARD_URL"),
+        wait_for_locator=os.getenv("FRAME_SCRAPER_WAIT_FOR_LOCATOR"),
         )
 
     file = await asyncio.create_task(scrape(config))
